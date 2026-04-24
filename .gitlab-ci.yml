@@ -1,0 +1,87 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  auto_cancel:
+    on_job_failure: none
+    on_new_commit: interruptible
+
+stages:
+  - preflight
+  - build
+  - test
+  - test-valgrind
+
+default:
+  timeout: 15m
+  interruptible: true
+
+ClangFormat:
+  stage: preflight
+  image: cr.ct.itmo.ru/cpp/containers/clang:22
+  script:
+    - ci-extra/check-clang-format.sh
+
+Check line breaks:
+  stage: preflight
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash dos2unix git
+  script:
+    - ci-extra/check-line-breaks.sh
+
+.build_matrix:
+  parallel:
+    matrix:
+      - COMPILER: &compilers
+          - gcc:15
+          - clang:22
+        BUILD_TYPE:
+          - Debug
+          - Release
+          - RelWithDebInfo
+          - Sanitized
+          - SanitizedDebug
+
+.compilers_matrix:
+  parallel:
+    matrix:
+      - COMPILER: *compilers
+
+Build:
+  stage: build
+  image: 'cr.ct.itmo.ru/cpp/containers/${COMPILER}'
+  extends: .build_matrix
+  script:
+    ci-extra/build.sh "${BUILD_TYPE}"
+  artifacts:
+    paths:
+      - 'build/${BUILD_TYPE}/test/tests'
+    expire_in: 2 hours
+
+Test:
+  stage: test
+  image: 'cr.ct.itmo.ru/cpp/containers/${COMPILER}'
+  extends: .build_matrix
+  needs:
+    - job: Build
+      parallel:
+        matrix:
+          - COMPILER: ['$[[ matrix.COMPILER ]]']
+            BUILD_TYPE: ['$[[ matrix.BUILD_TYPE ]]']
+  script:
+    - ci-extra/test.sh "${BUILD_TYPE}"
+
+Test with Valgrind:
+  stage: test-valgrind
+  image: 'cr.ct.itmo.ru/cpp/containers/${COMPILER}'
+  extends: .compilers_matrix
+  needs:
+    - job: Build
+      parallel: &valgrind-needs-parallel
+        matrix:
+          - COMPILER: ['$[[ matrix.COMPILER ]]']
+            BUILD_TYPE: ['RelWithDebInfo']
+    - job: Test
+      parallel: *valgrind-needs-parallel
+  script:
+    - ci-extra/test-valgrind.sh 'RelWithDebInfo'

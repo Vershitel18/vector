@@ -1,0 +1,73 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "Base",
+      "description": "General preset that applies to all configurations",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "Release",
+      "description": "Release build",
+      "inherits": "Base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "Debug",
+      "description": "Debug build",
+      "inherits": "Base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CT_HARDENED": "ON"
+      }
+    },
+    {
+      "name": "RelWithDebInfo",
+      "description": "RelWithDebInfo build",
+      "inherits": "Base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "Sanitized",
+      "description": "RelWithDebInfo build with undefined and address sanitizers enabled",
+      "inherits": "RelWithDebInfo",
+      "cacheVariables": {
+        "CT_SANITIZED": "ON"
+      }
+    },
+    {
+      "name": "SanitizedDebug",
+      "description": "Debug build with undefined and address sanitizers enabled",
+      "inherits": "Debug",
+      "cacheVariables": {
+        "CT_SANITIZED": "ON"
+      }
+    },
+    {
+      "name": "ThreadSanitized",
+      "description": "RelWithDebInfo build with thread sanitizer enabled",
+      "inherits": "RelWithDebInfo",
+      "cacheVariables": {
+        "CT_THREAD_SANITIZED": "ON"
+      }
+    },
+    {
+      "name": "ThreadSanitizedDebug",
+      "description": "Debug build with thread sanitizer enabled",
+      "inherits": "Debug",
+      "cacheVariables": {
+        "CT_THREAD_SANITIZED": "ON"
+      }
+    }
+  ]
+}
