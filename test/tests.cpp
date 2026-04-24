@@ -93,14 +93,8 @@ TEST_CASE_METHOD(CorrectnessTest, "default ctor") {
 }
 
 TEST_CASE_METHOD(ExceptionSafetyTest, "non-throwing default ctor") {
-  faulty_run([] {
-    try {
-      Vector<Element> a;
-    } catch (...) {
-      FaultInjectionDisable dg;
-      FAIL_CHECK("default constructor should not throw");
-      throw;
-    }
+  assert_nothrow([] {
+    [[maybe_unused]] Vector<Element> a;
   });
 }
 
@@ -593,20 +587,14 @@ TEST_CASE_METHOD(CorrectnessTest, "`clear`") {
 }
 
 TEST_CASE_METHOD(ExceptionSafetyTest, "non-throwing `clear`") {
-  faulty_run([] {
+  assert_nothrow([] {
     FaultInjectionDisable dg;
     Vector<Element> a;
     for (int i = 0; i < 10; ++i) {
       a.push_back(2 * i + 1);
     }
     dg.reset();
-    try {
-      a.clear();
-    } catch (...) {
-      FaultInjectionDisable dg_2;
-      FAIL_CHECK("clear() should not throw");
-      throw;
-    }
+    a.clear();
   });
 }
 
