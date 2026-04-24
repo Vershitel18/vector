@@ -37,7 +37,7 @@ function(ct_set_compiler_warnings TARGET)
         -Wno-c2y-extensions # Catch2 using __COUNTER__ inside
     )
 
-    set(msvc_warnings /W4 /permissive-)
+    set(msvc_warnings /W4 /wd4324 /permissive-)
 
     if(CT_TREAT_WARNINGS_AS_ERRORS)
         message(STATUS "Warnings are treated as errors")

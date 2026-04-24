@@ -6,6 +6,10 @@
 #include <numeric>
 #include <vector>
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include <malloc.h>
+#endif
+
 namespace {
 
 void* injected_allocate(size_t count, size_t alignment) {
@@ -18,7 +22,11 @@ void* injected_allocate(size_t count, size_t alignment) {
     count += (alignment - (count % alignment));
   }
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+  void* ptr = _aligned_malloc(count, alignment);
+#else
   void* ptr = std::aligned_alloc(alignment, count);
+#endif
   if (ptr == nullptr) {
     throw std::bad_alloc();
   }
@@ -27,7 +35,11 @@ void* injected_allocate(size_t count, size_t alignment) {
 }
 
 void injected_deallocate(void* ptr) {
+#if defined(_MSC_VER) || defined(__MINGW32__)
+  _aligned_free(ptr);
+#else
   std::free(ptr);
+#endif
 }
 
 template <typename T>
