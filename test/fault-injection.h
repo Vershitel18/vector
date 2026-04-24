@@ -12,6 +12,7 @@ struct InjectedFault : std::runtime_error {
 bool should_inject_fault();
 void fault_injection_point();
 void faulty_run(const std::function<void()>& f);
+void assert_nothrow(const std::function<void()>& f);
 
 struct FaultInjectionDisable {
   FaultInjectionDisable();
