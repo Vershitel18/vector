@@ -34,23 +34,26 @@ public:
 
   // O(N) strong
   Vector(const Vector& other)
-      : data_(static_cast<T*>(operator new(sizeof(T) * other.size(), std::align_val_t(alignof(T)))))
+      : data_(nullptr)
       , size_(other.size())
       , capacity_(other.size()) {
     if (other.size() == 0) {
-      data_ = nullptr;
       return;
     }
 
-    for (std::size_t i = 0; i < size(); ++i) {
-      try {
-        new (data_ + i) T(other[i]);
-      } catch (...) {
-        for (std::size_t last = i; last > 0; last--) {
-          (data_ + last - 1)->~T();
-        }
-        throw;
+    data_ = static_cast<T*>(operator new(sizeof(T) * other.size(), std::align_val_t(alignof(T))));
+    std::size_t index = 0;
+    try {
+      for (; index < size_; ++index) {
+        new (data_ + index) T(other[index]);
       }
+    } catch (...) {
+      for (std::size_t last = index; last > 0; --last) {
+        (data_ + last - 1)->~T();
+      }
+      operator delete(data_, std::align_val_t(alignof(T)));
+      data_ = nullptr;
+      throw;
     }
   }
 
