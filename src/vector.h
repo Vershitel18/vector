@@ -48,17 +48,14 @@ public:
         new (data_ + index) T(other[index]);
       }
     } catch (...) {
-      for (std::size_t last = index; last > 0; --last) {
-        (data_ + last - 1)->~T();
-      }
-      operator delete(data_, std::align_val_t(alignof(T)));
+      clear_buffer(data_, index);
       data_ = nullptr;
       throw;
     }
   }
 
   // O(1) nothrow
-  Vector(Vector&& other)
+  Vector(Vector&& other) noexcept
       : Vector() {
     swap(other);
   }
@@ -73,7 +70,7 @@ public:
   }
 
   // O(N) nothrow
-  Vector& operator=(Vector&& other) {
+  Vector& operator=(Vector&& other) noexcept {
     if (this != &other) {
       Vector{}.swap(*this);
       swap(other);
@@ -83,15 +80,12 @@ public:
 
   // O(N) nothrow
   ~Vector() noexcept {
-    for (std::size_t i = size(); i > 0; --i) {
-      (data_ + i - 1)->~T();
-    }
-    operator delete(data_, std::align_val_t(alignof(T)));
+    clear_buffer(data_, size());
   }
 
   // O(1) nothrow
   Reference operator[](size_t index) {
-    return *(data_ + index); // надо подумать что делает этот оператор если index некорректен
+    return *(data_ + index);
   }
 
   // O(1) nothrow
@@ -134,16 +128,16 @@ public:
     return data_[size_ - 1];
   }
 
-  // O(1)* strong
-  void push_back(const T& value) {
+  template <typename U>
+  void push_back_method(U&& value) {
     if (size() + 1 <= capacity()) {
-      new (data_ + size()) T(value);
+      new (data_ + size()) T(std::forward<U>(value));
       size_ += 1;
       return;
     }
-    T* newArr = static_cast<T*>(operator new(sizeof(T) * ((capacity_ * 2) + 1), std::align_val_t(alignof(T))));
+    T* newArr = static_cast<T*>(operator new(sizeof(T) * new_capacity(capacity()), std::align_val_t(alignof(T))));
     try {
-      new (newArr + size()) T(value);
+      new (newArr + size()) T(std::forward<U>(value));
       std::size_t index = 0;
       try {
         for (; index < size_; ++index) {
@@ -160,13 +154,15 @@ public:
       operator delete(newArr, std::align_val_t(alignof(T)));
       throw;
     }
-    for (std::size_t i = size(); i > 0; --i) {
-      (data_ + i - 1)->~T();
-    }
-    operator delete(data_, std::align_val_t(alignof(T)));
+    clear_buffer(data_, size());
     data_ = newArr;
     size_ += 1;
-    capacity_ = capacity_ * 2 + 1;
+    capacity_ = new_capacity(capacity_);
+  }
+
+  // O(1)* strong
+  void push_back(const T& value) {
+    push_back_method(value);
   }
 
   // O(1)* strong т.к от push_back(const T&) отличается только тем,
@@ -174,37 +170,7 @@ public:
   // и если он бросит исключение мы его поймаем в try,
   // и в итоге оригинальный вектор останется в валидном состоянии
   void push_back(T&& value) {
-    if (size() + 1 <= capacity_) {
-      new (data_ + size()) T(std::move(value));
-      size_ += 1;
-      return;
-    }
-    T* newArr = static_cast<T*>(operator new(sizeof(T) * ((capacity_ * 2) + 1), std::align_val_t(alignof(T))));
-    try {
-      new (newArr + size()) T(std::move(value));
-      std::size_t index = 0;
-      try {
-        for (; index < size_; ++index) {
-          new (newArr + index) T(std::move_if_noexcept(data_[index]));
-        }
-      } catch (...) {
-        for (; index > 0; --index) {
-          (newArr + index - 1)->~T();
-        }
-        (newArr + size())->~T();
-        throw;
-      }
-    } catch (...) {
-      operator delete(newArr, std::align_val_t(alignof(T)));
-      throw;
-    }
-    for (std::size_t i = size(); i > 0; --i) {
-      (data_ + i - 1)->~T();
-    }
-    operator delete(data_, std::align_val_t(alignof(T)));
-    data_ = newArr;
-    size_ += 1;
-    capacity_ = capacity_ * 2 + 1;
+    push_back_method(std::move(value));
   }
 
   // O(1) nothrow
@@ -228,53 +194,15 @@ public:
     if (capacity() >= new_capacity) {
       return;
     }
-    T* newArr = static_cast<T*>(operator new(sizeof(T) * (new_capacity), std::align_val_t(alignof(T))));
-    std::size_t index = 0;
-    try {
-      for (; index < size_; ++index) {
-        new (newArr + index) T(
-            std::move_if_noexcept(data_[index])
-        ); // если для T move сонструктор не бросает исключений выгоднее будет мувать а не копировать
-      }
-    } catch (...) {
-      for (; index > 0; --index) {
-        (newArr + index - 1)->~T();
-      }
-      operator delete(newArr, std::align_val_t(alignof(T)));
-      throw;
-    }
-    for (std::size_t i = size(); i > 0; --i) {
-      (data_ + i - 1)->~T();
-    }
-    operator delete(data_, std::align_val_t(alignof(T)));
-    data_ = newArr;
-    capacity_ = new_capacity;
+    Vector tmp(*this, new_capacity);
+    swap(tmp);
   }
 
   // O(N) strong
   void shrink_to_fit() {
     if (capacity_ > size_) {
-      T* newArr = static_cast<T*>(operator new(sizeof(T) * (size_), std::align_val_t(alignof(T))));
-      std::size_t index = 0;
-      try {
-        for (; index < size_; ++index) {
-          new (newArr + index) T(
-              std::move_if_noexcept(data_[index])
-          ); // если для T move сонструктор не бросает исключений выгоднее будет мувать а не копировать
-        }
-      } catch (...) {
-        for (; index > 0; --index) {
-          (newArr + index - 1)->~T();
-        }
-        operator delete(newArr, std::align_val_t(alignof(T)));
-        throw;
-      }
-      for (std::size_t i = size(); i > 0; --i) {
-        (data_ + i - 1)->~T();
-      }
-      operator delete(data_, std::align_val_t(alignof(T)));
-      data_ = newArr;
-      capacity_ = size_;
+      Vector tmp(*this, size());
+      swap(tmp);
     }
   }
 
@@ -314,7 +242,7 @@ public:
     return ConstIterator(data_ + size_);
   }
 
-  // O(N) basic garanty так как если мы не знаем swap noexcept для T
+  // O(N) basic garanty, так как мы не знаем noexcept ли swap для T
   // если для T swap noexcept, то strong
   Iterator insert(ConstIterator pos, const T& value) {
     std::size_t offset = pos - begin();
@@ -326,7 +254,7 @@ public:
     return begin() + offset;
   }
 
-  // O(N) basic garanty, if swap for T noexcept
+  // O(N) basic garanty, if swap for T no noexcept
   Iterator insert(ConstIterator pos, T&& value) {
     std::size_t offset = pos - begin();
     push_back(std::move(value));
@@ -340,7 +268,7 @@ public:
   // O(N) basic garanty, потому что swap для T может быть не noexcept
   Iterator erase(ConstIterator pos) {
     std::size_t offset = pos - begin();
-    Iterator mutable_iterator = const_cast<Iterator>(pos);
+    Iterator mutable_iterator = begin() + offset;
     for (auto it = mutable_iterator; it != end() - 1; ++it) {
       std::swap(*it, *(it + 1));
     }
@@ -353,8 +281,8 @@ public:
     std::size_t elements = end() - last;
     std::size_t offset = first - begin();
     std::size_t length = last - first;
-    Iterator mutable_first = const_cast<Iterator>(first);
-    Iterator mutable_last = const_cast<Iterator>(last);
+    Iterator mutable_first = begin() + offset;
+    Iterator mutable_last = begin() + offset + length;
     for (std::size_t index = 0; index < elements; ++index) {
       std::swap(*(mutable_first + index), *(mutable_last + index));
     }
@@ -365,6 +293,33 @@ public:
   }
 
 private:
+  static std::size_t new_capacity(std::size_t capacity) noexcept {
+    return capacity == 0 ? 1 : capacity * 2 + 1;
+  }
+
+  static void clear_buffer(T* data, std::size_t size) noexcept {
+    for (std::size_t i = size; i > 0; --i) {
+      (data + i - 1)->~T();
+    }
+    operator delete(data, std::align_val_t(alignof(T)));
+  }
+
+  Vector(Vector& other, std::size_t capacity) {
+    T* newArr = static_cast<T*>(operator new(sizeof(T) * capacity, std::align_val_t(alignof(T))));
+    std::size_t index = 0;
+    try {
+      for (; index < other.size(); ++index) {
+        new (newArr + index) T(std::move_if_noexcept(other.data()[index]));
+      }
+    } catch (...) {
+      clear_buffer(newArr, index);
+      throw;
+    }
+    data_ = newArr;
+    capacity_ = capacity;
+    size_ = other.size();
+  }
+
   T* data_;
   size_t size_;
   size_t capacity_;
