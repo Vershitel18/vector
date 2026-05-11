@@ -107,12 +107,12 @@ public:
 
   // O(1) nothrow
   Reference front() {
-    return data_[0];
+    return *begin();
   }
 
   // O(1) nothrow
   ConstReference front() const {
-    return data_[0];
+    return *begin();
   }
 
   // O(1) nothrow
