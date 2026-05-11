@@ -117,12 +117,12 @@ public:
 
   // O(1) nothrow
   Reference back() {
-    return data_[size_ - 1];
+    return *(end() - 1);
   }
 
   // O(1) nothrow
   ConstReference back() const {
-    return data_[size_ - 1];
+    return *(end() - 1);
   }
 
   static T* alocation_buffer(std::size_t capacity) {
