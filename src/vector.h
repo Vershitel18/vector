@@ -41,7 +41,7 @@ public:
       return;
     }
 
-    data_ = static_cast<T*>(operator new(sizeof(T) * other.size(), std::align_val_t(alignof(T))));
+    data_ = alocation_buffer(other.size());
     std::size_t index = 0;
     try {
       for (; index < size_; ++index) {
@@ -71,10 +71,7 @@ public:
 
   // O(N) nothrow
   Vector& operator=(Vector&& other) noexcept {
-    if (this != &other) {
-      Vector{}.swap(*this);
-      swap(other);
-    }
+    Vector(std::move(other)).swap(*this);
     return *this;
   }
 
@@ -95,12 +92,12 @@ public:
 
   // O(1) nothrow
   Pointer data() noexcept {
-    return data_;
+    return begin();
   }
 
   // O(1) nothrow
   ConstPointer data() const noexcept {
-    return data_;
+    return begin();
   }
 
   // O(1) nothrow
@@ -128,6 +125,10 @@ public:
     return data_[size_ - 1];
   }
 
+  static T* alocation_buffer(std::size_t capacity) {
+    return static_cast<T*>(operator new(sizeof(T) * capacity, std::align_val_t(alignof(T))));
+  }
+
   template <typename U>
   void push_back_method(U&& value) {
     if (size() + 1 <= capacity()) {
@@ -135,22 +136,22 @@ public:
       size_ += 1;
       return;
     }
-    T* newArr = static_cast<T*>(operator new(sizeof(T) * new_capacity(capacity()), std::align_val_t(alignof(T))));
+    T* newArr = alocation_buffer(new_capacity(capacity()));
+    std::size_t index = 0;
+    bool constructed = false;
     try {
       new (newArr + size()) T(std::forward<U>(value));
-      std::size_t index = 0;
-      try {
-        for (; index < size_; ++index) {
-          new (newArr + index) T(std::move_if_noexcept(data_[index]));
-        }
-      } catch (...) {
-        for (; index > 0; --index) {
-          (newArr + index - 1)->~T();
-        }
-        (newArr + size())->~T();
-        throw;
+      constructed = true;
+      for (; index < size_; ++index) {
+        new (newArr + index) T(std::move_if_noexcept(data_[index]));
       }
     } catch (...) {
+      for (; index > 0; --index) {
+        (newArr + index - 1)->~T();
+      }
+      if (constructed) {
+        (newArr + size())->~T();
+      }
       operator delete(newArr, std::align_val_t(alignof(T)));
       throw;
     }
@@ -165,10 +166,10 @@ public:
     push_back_method(value);
   }
 
-  // O(1)* strong т.к от push_back(const T&) отличается только тем,
+  // O(1)* basic garanty т.к от push_back(const T&) отличается тем,
   // что последний элемент мы делаем move,
-  // и если он бросит исключение мы его поймаем в try,
-  // и в итоге оригинальный вектор останется в валидном состоянии
+  // и случиться так, что это будет элемент из вектора,
+  // то он станет moved from
   void push_back(T&& value) {
     push_back_method(std::move(value));
   }
@@ -255,6 +256,7 @@ public:
   }
 
   // O(N) basic garanty, if swap for T no noexcept
+  // если же swap noexcept для T, то это strong garanty
   Iterator insert(ConstIterator pos, T&& value) {
     std::size_t offset = pos - begin();
     push_back(std::move(value));
@@ -266,14 +268,9 @@ public:
   }
 
   // O(N) basic garanty, потому что swap для T может быть не noexcept
+  // если же swap noexcept для T, то это strong garanty
   Iterator erase(ConstIterator pos) {
-    std::size_t offset = pos - begin();
-    Iterator mutable_iterator = begin() + offset;
-    for (auto it = mutable_iterator; it != end() - 1; ++it) {
-      std::swap(*it, *(it + 1));
-    }
-    pop_back();
-    return begin() + offset;
+    return erase(pos, pos + 1);
   }
 
   // O(N) basic garanty, потому что swap для T может быть не noexcept
@@ -294,7 +291,7 @@ public:
 
 private:
   static std::size_t new_capacity(std::size_t capacity) noexcept {
-    return capacity == 0 ? 1 : capacity * 2 + 1;
+    return capacity * 2 + 1;
   }
 
   static void clear_buffer(T* data, std::size_t size) noexcept {
@@ -305,7 +302,7 @@ private:
   }
 
   Vector(Vector& other, std::size_t capacity) {
-    T* newArr = static_cast<T*>(operator new(sizeof(T) * capacity, std::align_val_t(alignof(T))));
+    T* newArr = alocation_buffer(capacity);
     std::size_t index = 0;
     try {
       for (; index < other.size(); ++index) {
@@ -316,6 +313,9 @@ private:
       throw;
     }
     data_ = newArr;
+    if (capacity == 0) {
+      data_ = nullptr;
+    }
     capacity_ = capacity;
     size_ = other.size();
   }
