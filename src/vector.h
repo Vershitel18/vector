@@ -136,29 +136,20 @@ public:
       size_ += 1;
       return;
     }
-    T* newArr = alocation_buffer(new_capacity(capacity()));
+    Vector tmp(new_capacity(capacity_));
     std::size_t index = 0;
-    bool constructed = false;
+    new (tmp.data() + size()) T(std::forward<U>(value));
     try {
-      new (newArr + size()) T(std::forward<U>(value));
-      constructed = true;
-      for (; index < size_; ++index) {
-        new (newArr + index) T(std::move_if_noexcept(data_[index]));
+      for (; index < size(); ++index) {
+        new (tmp.data() + index) T(std::move_if_noexcept(data_[index]));
+        ++tmp.size_;
       }
+      ++tmp.size_; // last element
     } catch (...) {
-      for (; index > 0; --index) {
-        (newArr + index - 1)->~T();
-      }
-      if (constructed) {
-        (newArr + size())->~T();
-      }
-      operator delete(newArr, std::align_val_t(alignof(T)));
+      (tmp.data() + size())->~T();
       throw;
     }
-    clear_buffer(data_, size());
-    data_ = newArr;
-    size_ += 1;
-    capacity_ = new_capacity(capacity_);
+    swap(tmp);
   }
 
   // O(1)* strong
@@ -300,6 +291,11 @@ private:
     }
     operator delete(data, std::align_val_t(alignof(T)));
   }
+
+  Vector(std::size_t capacity)
+      : data_(capacity == 0 ? nullptr : alocation_buffer(capacity))
+      , size_(0)
+      , capacity_(capacity) {}
 
   Vector(Vector& other, std::size_t capacity) {
     T* newArr = alocation_buffer(capacity);
